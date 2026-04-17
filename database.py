@@ -27,21 +27,6 @@ def traducir_sql(consulta):
     return consulta
 
 def inicializar_db():
-    """Crea la estructura de tablas inicial si no existe."""
-    logger.info("Verificando/Inicializando esquema de base de datos...")
-    with obtener_conexion() as conexion:
-        cursor = conexion.cursor()
-        
-        # Tabla de Subregiones
-        cursor.execute(traducir_sql("""
-            CREATE TABLE IF NOT EXISTS subregiones (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL UNIQUE
-            )
-        """))
-        
-        # Tabla de Eventos Epidemiológicos
-        cursor.execute(traducir_sql("""
     """Crea la estructura de tablas inicial y siembra administradores base."""
     # Importar localmente para evitar circularidad
     from auth import generar_hash_clave
