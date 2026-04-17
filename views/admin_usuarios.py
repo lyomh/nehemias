@@ -39,12 +39,18 @@ def vista_gestionar_usuarios(id_usuario_actual, rol_actual):
                 
                 if rol_a_crear == 'RS':
                     df_sub = obtener_subregiones()
-                    seleccion_sub = st.selectbox("Seleccione Subregión", df_sub['nombre'])
-                    id_sub = int(df_sub[df_sub['nombre'] == seleccion_sub]['id'].values[0])
+                    if not df_sub.empty:
+                        seleccion_sub = st.selectbox("Seleccione Subregión", df_sub['nombre'])
+                        id_sub = int(df_sub[df_sub['nombre'] == seleccion_sub]['id'].values[0])
+                    else:
+                        st.error("No hay subregiones configuradas. Contacte al administrador.")
                 else:
                     df_eventos = obtener_catalogo_eventos()
-                    seleccion_evento = st.selectbox("Asignar Grupo Funcional (Evento)", df_eventos['nombre'])
-                    id_evento = int(df_eventos[df_eventos['nombre'] == seleccion_evento]['id'].values[0])
+                    if not df_eventos.empty:
+                        seleccion_evento = st.selectbox("Asignar Grupo Funcional (Evento)", df_eventos['nombre'])
+                        id_evento = int(df_eventos[df_eventos['nombre'] == seleccion_evento]['id'].values[0])
+                    else:
+                        st.error("No hay grupos funcionales configurados. Contacte al administrador.")
             
             enviar = st.form_submit_button(f"REGISTRAR {rol_a_crear}")
             
