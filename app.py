@@ -9,8 +9,15 @@ from views.tablero import vista_tablero
 from estilos import aplicar_estilos_personalizados
 from registro_config import obtener_registrador
 
-# Configuración de página e indicadores técnicos
+# Configuración de registro e infraestructura inicial
 logger = obtener_registrador("aplicacion_principal")
+
+# Garantizar que la base de datos SQLite exista al arrancar (Crítico para la nube)
+from database import inicializar_db
+try:
+    inicializar_db()
+except Exception as e:
+    logger.error(f"Fallo en inicialización automática: {e}")
 
 st.set_page_config(
     page_title="Proyecto Nehemías - Vigilancia Epidemiológica",

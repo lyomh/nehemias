@@ -3,27 +3,19 @@ import pandas as pd
 from datetime import datetime
 from contextlib import contextmanager
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from registro_config import obtener_registrador
 
-# Configuración de Motor de Base de Datos
-URL_PRODUCCION = os.getenv("DATABASE_URL")  # Mantenemos el nombre del secreto de la nube
-RUTA_SQLITE = os.getenv("DATABASE_URL_SQLITE", "nehemias.db")
-ES_POSTGRES = URL_PRODUCCION is not None and URL_PRODUCCION.startswith("postgres")
+# Configuración de Motor de Base de Datos (SQLite Exclusivo por solicitud)
+RUTA_SQLITE = "nehemias.db"
+ES_POSTGRES = False  # Desactivado para maximizar estabilidad local
 
 logger = obtener_registrador("base_datos")
 
 @contextmanager
 def obtener_conexion():
-    """Genera una conexión compatible con SQLite o PostgreSQL según el entorno."""
-    if ES_POSTGRES:
-        # Corregir URL para SQLAlchemy/Psycopg2 si es necesario
-        direccion_db = URL_PRODUCCION.replace("postgres://", "postgresql://", 1)
-        conexion = psycopg2.connect(direccion_db, cursor_factory=RealDictCursor)
-    else:
-        conexion = sqlite3.connect(RUTA_SQLITE)
-        conexion.row_factory = sqlite3.Row
+    """Genera una conexión SQLite local para máxima estabilidad."""
+    conexion = sqlite3.connect(RUTA_SQLITE)
+    conexion.row_factory = sqlite3.Row
         
     try:
         yield conexion
@@ -31,42 +23,7 @@ def obtener_conexion():
         conexion.close()
 
 def traducir_sql(consulta):
-    """Traduce sintaxis básica de SQLite a PostgreSQL si es necesario."""
-    if not ES_POSTGRES:
-        return consulta
-    
-    # 1. Marcadores de posición: ? -> %s
-    consulta = consulta.replace("?", "%s")
-    
-    # 2. Funciones de fecha (strftime -> TO_CHAR)
-    # Reemplazo de Años
-    consulta = consulta.replace("strftime('%Y',", "TO_CHAR(")
-    # Reemplazo de Meses
-    consulta = consulta.replace("strftime('%m',", "TO_CHAR(")
-    
-    # Ajuste manual de formatos tras el cambio a TO_CHAR
-    import re
-    # Para años: Detectar TO_CHAR(...) = %s y ponerle 'YYYY'
-    # Esta regex es inteligente para capturar el contenido del TO_CHAR
-    consulta = re.sub(r"TO_CHAR\(([^,)]+)\)\s*=\s*%s", r"TO_CHAR(\1, 'YYYY') = %s", consulta)
-    
-    # Para meses: Heurística para detectar comparaciones de mes
-    if "strftime('%m'," in consulta or "TO_CHAR(" in consulta:
-       consulta = consulta.replace("TO_CHAR(created_at) = %s AND TO_CHAR(created_at) = %s", "TO_CHAR(created_at, 'YYYY') = %s AND TO_CHAR(created_at, 'MM') = %s")
-       consulta = consulta.replace("TO_CHAR(a.created_at) = %s AND TO_CHAR(a.created_at) = %s", "TO_CHAR(a.created_at, 'YYYY') = %s AND TO_CHAR(a.created_at, 'MM') = %s")
-    
-    consulta = consulta.replace("as year", ", 'YYYY') as year")
-    consulta = consulta.replace("as mes_num", ", 'MM') as mes_num")
-
-    # 3. Autoincrement y Conflictos
-    consulta = consulta.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-    
-    # Manejo de INSERT OR IGNORE -> ON CONFLICT DO NOTHING
-    if "INSERT OR IGNORE INTO subregiones" in consulta:
-        consulta = "INSERT INTO subregiones (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING"
-    elif "INSERT OR IGNORE INTO catalog_eventos" in consulta:
-        consulta = "INSERT INTO catalog_eventos (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING"
-    
+    """Pasarela de compatibilidad (Desactivada al usar SQLite nativo)."""
     return consulta
 
 def inicializar_db():
@@ -85,58 +42,95 @@ def inicializar_db():
         
         # Tabla de Eventos Epidemiológicos
         cursor.execute(traducir_sql("""
-            CREATE TABLE IF NOT EXISTS catalog_eventos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL UNIQUE
-            )
-        """))
+    """Crea la estructura de tablas inicial y siembra administradores base."""
+    # Importar localmente para evitar circularidad
+    from auth import generar_hash_clave
+    
+    logger.info("Verificando/Inicializando esquema de base de datos SQLite...")
+    with obtener_conexion() as conexion:
+        cursor = conexion.cursor()
         
-        # Tabla de Usuarios
-        cursor.execute(traducir_sql("""
+        # 1. Tabla de Usuarios
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
+                username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL,
                 subregion_id INTEGER,
                 evento_id INTEGER,
-                is_active INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 created_by INTEGER,
-                FOREIGN KEY (subregion_id) REFERENCES subregiones(id),
-                FOREIGN KEY (evento_id) REFERENCES catalog_eventos(id)
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """))
+        """)
         
-        # Tabla de Actividades (Lotes)
-        cursor.execute(traducir_sql("""
+        # Siembra de Administradores si la tabla está vacía
+        cursor.execute("SELECT COUNT(*) FROM users")
+        if cursor.fetchone()[0] == 0:
+            clave_hash = generar_hash_clave("Nehemias2026*")
+            cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
+                           ("admin_central", clave_hash, "ARD"))
+            cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
+                           ("admin_territorial", clave_hash, "ART"))
+            logger.info("Siembra inicial de administradores completada.")
+        
+        # 2. Catálogo de Subregiones
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS subregiones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT UNIQUE NOT NULL
+            )
+        """)
+        
+        # Siembra de subregiones si están vacías
+        cursor.execute("SELECT COUNT(*) FROM subregiones")
+        if cursor.fetchone()[0] == 0:
+            subregiones = ["Bajo Cauca", "Magdalena Medio", "Nordeste", "Norte", "Occidente", "Oriente", "Suroeste", "Urabá", "Valle de Aburrá"]
+            for s in subregiones:
+                cursor.execute("INSERT OR IGNORE INTO subregiones (nombre) VALUES (?)", (s,))
+            logger.info("Siembra inicial de subregiones completada.")
+
+        # 3. Catálogo de Eventos
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS catalog_eventos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT UNIQUE NOT NULL
+            )
+        """)
+        
+        # Siembra de eventos si están vacíos
+        cursor.execute("SELECT COUNT(*) FROM catalog_eventos")
+        if cursor.fetchone()[0] == 0:
+            eventos = ["Evento 359 (Adulto/Pediátrico)", "Tuberculosis", "VIH / Sida", "Salud Mental", "Vigilancia de Mortalidad", "ETV", "Zoonosis", "Inmunoprevenibles"]
+            for e in eventos:
+                cursor.execute("INSERT OR IGNORE INTO catalog_eventos (nombre) VALUES (?)", (e,))
+            logger.info("Siembra inicial de eventos completada.")
+
+        # 4. Tabla de Actividades (Lotes)
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS actividades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 titulo TEXT NOT NULL,
                 descripcion TEXT,
                 subregion_id INTEGER,
+                status TEXT DEFAULT 'Activa',
                 created_by INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'Activa',
                 fecha_toma TIMESTAMP,
                 fecha_respuesta TIMESTAMP,
-                fecha_asignacion TIMESTAMP,
                 fecha_cierre TIMESTAMP,
                 respuesta_tecnica TEXT,
                 anulacion_motivo TEXT,
-                FOREIGN KEY (subregion_id) REFERENCES subregiones(id),
-                FOREIGN KEY (created_by) REFERENCES users(id)
+                FOREIGN KEY (subregion_id) REFERENCES subregiones(id)
             )
-        """))
+        """)
         
-        # Tabla de Ajustes (Detalle granular de los lotes)
-        cursor.execute(traducir_sql("""
+        # 5. Tabla de Ajustes (Registros de Lotes)
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS ajustes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 actividad_id INTEGER,
-                cod_pre TEXT,
-                cod_sub TEXT,
-                cod_eve TEXT,
                 nom_eve TEXT,
                 fec_not TEXT,
                 nom_upgd TEXT,
@@ -156,20 +150,21 @@ def inicializar_db():
                 validacion_red TEXT DEFAULT 'Pendiente',
                 FOREIGN KEY (actividad_id) REFERENCES actividades(id)
             )
-        """))
+        """)
         
-        # Tabla de Auditoría (Interna de la DB)
-        cursor.execute(traducir_sql("""
+        # 6. Tabla de Auditoría
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS logs_auditoria (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
-                accion TEXT,
+                accion TEXT NOT NULL,
                 detalle TEXT,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """))
+        """)
+        
         conexion.commit()
-    logger.info("Esquema de base de datos verificado con éxito.")
+    logger.info("Infraestructura SQLite estabilizada con éxito.")
 
 # --- Funciones de Auditoría ---
 
