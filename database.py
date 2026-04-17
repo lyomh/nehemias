@@ -149,6 +149,17 @@ def inicializar_db():
             )
         """)
         
+        # --- Migraciones de Emergencia (Para esquemas ya existentes) ---
+        try:
+            # Verificar si falta fecha_asignacion en actividades
+            cursor.execute("PRAGMA table_info(actividades)")
+            columnas = [col[1] for col in cursor.fetchall()]
+            if 'fecha_asignacion' not in columnas:
+                cursor.execute("ALTER TABLE actividades ADD COLUMN fecha_asignacion TIMESTAMP")
+                logger.info("Migración: Columna 'fecha_asignacion' agregada a 'actividades'.")
+        except Exception as e:
+            logger.warning(f"Aviso en migración de actividades: {e}")
+
         conexion.commit()
     logger.info("Infraestructura SQLite estabilizada con éxito.")
 
