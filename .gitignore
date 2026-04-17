@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Data and Database (CRITICAL)
+*.db
+nehemias.db
+nehemias_pass.txt
+
+# Logs
+logs/
+*.log
+
+# Project Specific
+docs/
+actualizaciones.md
+scratch/
+.temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
