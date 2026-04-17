@@ -33,9 +33,9 @@ def autenticar_usuario(nombre_usuario, clave):
     try:
         with obtener_conexion() as conexion:
             cursor = conexion.cursor()
-            query = "SELECT id, username, password_hash, role, subregion_id FROM users WHERE username = ? AND is_active = 1"
+            consulta = "SELECT id, username, password_hash, role, subregion_id FROM users WHERE username = ? AND is_active = 1"
             cursor.execute(
-                traducir_sql(query),
+                traducir_sql(consulta),
                 (nombre_usuario,)
             )
             usuario = cursor.fetchone()

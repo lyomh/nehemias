@@ -9,7 +9,8 @@ from database import (
     crear_usuario,
     actualizar_perfil_usuario,
     alternar_estado_usuario,
-    restablecer_clave_usuario
+    restablecer_clave_usuario,
+    traducir_sql
 )
 from auth import generar_hash_clave
 
@@ -67,47 +68,45 @@ def vista_gestionar_usuarios(id_usuario_actual, rol_actual):
     
     with obtener_conexion() as conexion:
         # Nota: La tabla de grupos funcionales se llama 'catalog_eventos' en la DB real
-        query = f"SELECT u.*, e.nombre as evento_nombre FROM users u LEFT JOIN catalog_eventos e ON u.evento_id = e.id WHERE u.created_by = {id_usuario_actual} AND u.role = '{rol_a_crear}'"
-        df_usuarios = pd.read_sql_query(query, conexion)
+        consulta = f"SELECT u.*, e.nombre as evento_nombre FROM users u LEFT JOIN catalog_eventos e ON u.evento_id = e.id WHERE u.created_by = {id_usuario_actual} AND u.role = '{rol_a_crear}'"
+        df_usuarios = pd.read_sql_query(traducir_sql(consulta), conexion)
     
     if df_usuarios.empty:
         st.info(f"No hay usuarios {rol_a_crear} registrados.")
     else:
-        for idx, fila in df_usuarios.iterrows():
+        for indice, registro in df_usuarios.iterrows():
             with st.container(border=True):
-                color_estado = "green" if fila['is_active'] else "red"
-                st.markdown(f"**Usuario:** {fila['username']} | **Estado:** <span style='color:{color_estado};'>{('ACTIVO' if fila['is_active'] else 'INACTIVO')}</span>", unsafe_allow_html=True)
-                
-                col_acc1, col_acc2, col_acc3 = st.columns([1, 1, 1])
+                color_estado = "green" if registro['is_active'] else "red"
+                st.markdown(f"**Usuario:** {registro['username']} | **Estado:** <span style='color:{color_estado};'>{('ACTIVO' if registro['is_active'] else 'INACTIVO')}</span>", unsafe_allow_html=True)
                 
                 with col_acc1:
                     with st.popover("✏️ EDITAR"):
-                        edit_nombre = st.text_input("Usuario", value=fila['username'], key=f"un_{fila['id']}")
-                        edit_id_evento = fila['evento_id']
+                        edit_nombre = st.text_input("Usuario", value=registro['username'], key=f"un_{registro['id']}")
+                        edit_id_evento = registro['evento_id']
                         if rol_a_crear == 'RED':
                             df_ev = obtener_catalogo_eventos()
                             # Encontrar index actual
-                            idx_actual = int(df_ev[df_ev['id'] == fila['evento_id']].index[0]) if fila['evento_id'] in df_ev['id'].values else 0
-                            seleccion_ev = st.selectbox("Grupo Funcional", df_ev['nombre'], index=idx_actual, key=f"ev_{fila['id']}")
+                            idx_actual = int(df_ev[df_ev['id'] == registro['evento_id']].index[0]) if registro['evento_id'] in df_ev['id'].values else 0
+                            seleccion_ev = st.selectbox("Grupo Funcional", df_ev['nombre'], index=idx_actual, key=f"ev_{registro['id']}")
                             edit_id_evento = int(df_ev[df_ev['nombre'] == seleccion_ev]['id'].values[0])
                         
-                        if st.button("Guardar Cambios", key=f"upd_{fila['id']}"):
-                            actualizar_perfil_usuario(fila['id'], edit_nombre, id_evento=edit_id_evento, id_subregion=fila['subregion_id'])
-                            registrar_accion(id_usuario_actual, "EDICION_PERFIL_USUARIO", f"ID: {fila['id']}")
+                        if st.button("Guardar Cambios", key=f"upd_{registro['id']}"):
+                            actualizar_perfil_usuario(registro['id'], edit_nombre, id_evento=edit_id_evento, id_subregion=registro['subregion_id'])
+                            registrar_accion(id_usuario_actual, "EDICION_PERFIL_USUARIO", f"ID: {registro['id']}")
                             st.rerun()
 
                 with col_acc2:
                     with st.popover("🔐 RESET CLAVE"):
                         st.warning("Se restablecerá a la clave institucional: Nehemias2026*")
-                        if st.button("Confirmar Reset", key=f"rst_{fila['id']}"):
+                        if st.button("Confirmar Reset", key=f"rst_{registro['id']}"):
                             nueva_hasheada = generar_hash_clave("Nehemias2026*")
-                            restablecer_clave_usuario(fila['id'], nueva_hasheada)
-                            registrar_accion(id_usuario_actual, "RESET_PASSWORD_USUARIO", f"ID: {fila['id']}")
+                            restablecer_clave_usuario(registro['id'], nueva_hasheada)
+                            registrar_accion(id_usuario_actual, "RESET_PASSWORD_USUARIO", f"ID: {registro['id']}")
                             st.success("Contraseña restablecida.")
 
                 with col_acc3:
-                    etiqueta = "🚫 DESACTIVAR" if fila['is_active'] else "✅ ACTIVAR"
-                    if st.button(etiqueta, key=f"tog_{fila['id']}"):
-                        alternar_estado_usuario(fila['id'], fila['is_active'])
+                    etiqueta = "🚫 DESACTIVAR" if registro['is_active'] else "✅ ACTIVAR"
+                    if st.button(etiqueta, key=f"tog_{registro['id']}"):
+                        alternar_estado_usuario(registro['id'], registro['is_active'])
                         st.rerun()
             st.markdown("<br>", unsafe_allow_html=True)
