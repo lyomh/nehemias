@@ -8,7 +8,7 @@ from psycopg2.extras import RealDictCursor
 from registro_config import obtener_registrador
 
 # Configuración de Motor de Base de Datos
-URL_PRODUCCION = os.getenv("URL_PRODUCCION")  # Para PostgreSQL en la nube
+URL_PRODUCCION = os.getenv("DATABASE_URL")  # Mantenemos el nombre del secreto de la nube
 RUTA_SQLITE = os.getenv("DATABASE_URL_SQLITE", "nehemias.db")
 ES_POSTGRES = URL_PRODUCCION is not None and URL_PRODUCCION.startswith("postgres")
 
