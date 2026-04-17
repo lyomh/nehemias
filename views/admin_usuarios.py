@@ -85,6 +85,7 @@ def vista_gestionar_usuarios(id_usuario_actual, rol_actual):
                 color_estado = "green" if registro['is_active'] else "red"
                 st.markdown(f"**Usuario:** {registro['username']} | **Estado:** <span style='color:{color_estado};'>{('ACTIVO' if registro['is_active'] else 'INACTIVO')}</span>", unsafe_allow_html=True)
                 
+                col_acc1, col_acc2 = st.columns(2)
                 with col_acc1:
                     with st.popover("✏️ EDITAR"):
                         edit_nombre = st.text_input("Usuario", value=registro['username'], key=f"un_{registro['id']}")

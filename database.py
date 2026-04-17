@@ -102,6 +102,7 @@ def inicializar_db():
                 status TEXT DEFAULT 'Activa',
                 created_by INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                fecha_asignacion TIMESTAMP,
                 fecha_toma TIMESTAMP,
                 fecha_respuesta TIMESTAMP,
                 fecha_cierre TIMESTAMP,
