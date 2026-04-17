@@ -117,6 +117,9 @@ def inicializar_db():
             CREATE TABLE IF NOT EXISTS ajustes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 actividad_id INTEGER,
+                cod_pre TEXT,
+                cod_sub TEXT,
+                cod_eve TEXT,
                 nom_eve TEXT,
                 fec_not TEXT,
                 nom_upgd TEXT,
@@ -151,14 +154,22 @@ def inicializar_db():
         
         # --- Migraciones de Emergencia (Para esquemas ya existentes) ---
         try:
-            # Verificar si falta fecha_asignacion en actividades
+            # 1. Migración para 'actividades'
             cursor.execute("PRAGMA table_info(actividades)")
-            columnas = [col[1] for col in cursor.fetchall()]
-            if 'fecha_asignacion' not in columnas:
+            columnas_act = [col[1] for col in cursor.fetchall()]
+            if 'fecha_asignacion' not in columnas_act:
                 cursor.execute("ALTER TABLE actividades ADD COLUMN fecha_asignacion TIMESTAMP")
                 logger.info("Migración: Columna 'fecha_asignacion' agregada a 'actividades'.")
+            
+            # 2. Migración para 'ajustes' (Columnas de catálogo faltantes)
+            cursor.execute("PRAGMA table_info(ajustes)")
+            columnas_aj = [col[1] for col in cursor.fetchall()]
+            for col_faltante in ['cod_pre', 'cod_sub', 'cod_eve']:
+                if col_faltante not in columnas_aj:
+                    cursor.execute(f"ALTER TABLE ajustes ADD COLUMN {col_faltante} TEXT")
+                    logger.info(f"Migración: Columna '{col_faltante}' agregada a 'ajustes'.")
         except Exception as e:
-            logger.warning(f"Aviso en migración de actividades: {e}")
+            logger.warning(f"Aviso en rutina de migraciones: {e}")
 
         conexion.commit()
     logger.info("Infraestructura SQLite estabilizada con éxito.")
