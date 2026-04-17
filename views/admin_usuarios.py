@@ -74,8 +74,8 @@ def vista_gestionar_usuarios(id_usuario_actual, rol_actual):
     
     with obtener_conexion() as conexion:
         # Nota: La tabla de grupos funcionales se llama 'catalog_eventos' en la DB real
-        consulta = f"SELECT u.*, e.nombre as evento_nombre FROM users u LEFT JOIN catalog_eventos e ON u.evento_id = e.id WHERE u.created_by = {id_usuario_actual} AND u.role = '{rol_a_crear}'"
-        df_usuarios = pd.read_sql_query(traducir_sql(consulta), conexion)
+        consulta = "SELECT u.*, e.nombre as evento_nombre FROM users u LEFT JOIN catalog_eventos e ON u.evento_id = e.id WHERE u.created_by = ? AND u.role = ?"
+        df_usuarios = pd.read_sql_query(traducir_sql(consulta), conexion, params=[id_usuario_actual, rol_a_crear])
     
     if df_usuarios.empty:
         st.info(f"No hay usuarios {rol_a_crear} registrados.")
