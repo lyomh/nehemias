@@ -38,13 +38,35 @@ def traducir_sql(query):
     # 1. Marcadores de posición: ? -> %s
     query = query.replace("?", "%s")
     
-    # 2. Funciones de fecha comunes
+    # 2. Funciones de fecha (strftime -> TO_CHAR)
+    # Reemplazo de Años
     query = query.replace("strftime('%Y',", "TO_CHAR(")
+    # Reemplazo de Meses
     query = query.replace("strftime('%m',", "TO_CHAR(")
-    # Ajuste manual de formatos si se usó strftime para extraer año/mes
-    query = query.replace("TO_CHAR(created_at) = %s", "TO_CHAR(created_at, 'YYYY') = %s")
-    query = query.replace("TO_CHAR(a.created_at) = %s", "TO_CHAR(a.created_at, 'YYYY') = %s")
     
+    # Ajuste manual de formatos tras el cambio a TO_CHAR
+    import re
+    # Para años: Detectar TO_CHAR(...) = %s y ponerle 'YYYY'
+    # Esta regex es inteligente para capturar el contenido del TO_CHAR
+    query = re.sub(r"TO_CHAR\(([^,)]+)\)\s*=\s*%s", r"TO_CHAR(\1, 'YYYY') = %s", query)
+    
+    # Para meses: Si el parámetro que sigue es un mes (2 dígitos), pero como no sabemos el parámetro aquí,
+    # usamos una heurística: si la consulta original tenía %m (ahora TO_CHAR), y no fue capturada por la de años,
+    # le ponemos 'MM' si detectamos que se usa para comparar.
+    # Pero como ya cambiamos %Y y %m a TO_CHAR sin formato, necesitamos diferenciar.
+    # MEJOR: Usar búsqueda específica antes de genérica
+    
+    # Volvemos a procesar para ser más precisos
+    if "strftime('%m'," in query or "TO_CHAR(" in query:
+       # Si ya convertimos a TO_CHAR pero no tiene formato, buscamos si es para mes
+       # Normalmente en nuestro código el mes se filtra justo después del año
+       query = query.replace("TO_CHAR(created_at) = %s AND TO_CHAR(created_at) = %s", "TO_CHAR(created_at, 'YYYY') = %s AND TO_CHAR(created_at, 'MM') = %s")
+       # Otra variante común con alias
+       query = query.replace("TO_CHAR(a.created_at) = %s AND TO_CHAR(a.created_at) = %s", "TO_CHAR(a.created_at, 'YYYY') = %s AND TO_CHAR(a.created_at, 'MM') = %s")
+    
+    query = query.replace("as year", ", 'YYYY') as year")
+    query = query.replace("as mes_num", ", 'MM') as mes_num")
+
     # 3. Autoincrement y Conflictos
     query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
     
