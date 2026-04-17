@@ -1,6 +1,6 @@
 import streamlit as st
 import bcrypt
-from database import obtener_conexion
+from database import obtener_conexion, traducir_sql
 from registro_config import obtener_registrador
 
 # Configuración de registro
@@ -33,8 +33,9 @@ def autenticar_usuario(nombre_usuario, clave):
     try:
         with obtener_conexion() as conexion:
             cursor = conexion.cursor()
+            query = "SELECT id, username, password_hash, role, subregion_id FROM users WHERE username = ? AND is_active = 1"
             cursor.execute(
-                "SELECT id, username, password_hash, role, subregion_id FROM users WHERE username = ? AND is_active = 1",
+                traducir_sql(query),
                 (nombre_usuario,)
             )
             usuario = cursor.fetchone()
